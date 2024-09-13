@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Metadata Extractor By Revo2024</title>
+    <script src="https://cdn.rawgit.com/exif-js/exif-js/master/exif.js"></script> <!-- Añadir exif-js -->
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            max-width: 600px;
+            width: 100%;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .button {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 25px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        .button:hover {
+            background-color: #45a049;
+        }
+        .button-clear {
+            background-color: #f44336;
+        }
+        .button-clear:hover {
+            background-color: #e53935;
+        }
+        .button-kml {
+            background-color: #008CBA;
+        }
+        .button-kml:hover {
+            background-color: #007bb5;
+        }
+        .textarea {
+            width: 100%;
+            height: 200px;
+            margin-top: 10px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+            font-size: 14px;
+            color: #333;
+            resize: none;
+        }
+        input[type="file"] {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Image Metadata Extractor By Revo2024</h1>
+        <label>Select images to extract metadata:</label>
+        <!-- Input oculto para selección de archivos -->
+        <input type="file" id="fileInput" accept="image/*" multiple>
+        <!-- Botón para abrir el cuadro de diálogo de selección de archivos -->
+        <button class="button" onclick="document.getElementById('fileInput').click()">Select Images</button>
+        <button class="button button-clear" onclick="clearText()">Clear</button>
+        <button class="button button-kml" onclick="saveAsKML()">Save as KML</button>
+        <textarea class="textarea" id="metadataOutput" readonly></textarea>
+    </div>
+
+    <script>
+        let extractedData = []; // Array para almacenar datos extraídos
+
+        // Función para convertir coordenadas GPS a grados decimales
+        function convertDMSToDD(degrees, minutes, seconds, direction) {
+            let dd = degrees + (minutes / 60) + (seconds / 3600);
+            if (direction === "S" || direction === "W") {
+                dd = dd * -1;
+            }
+            return dd;
+        }
+
+        // Función para leer los archivos seleccionados
+        document.getElementById('fileInput').addEventListener('change', function(event) {
+            const files = event.target.files;
+            const metadataOutput = document.getElementById('metadataOutput');
+            metadataOutput.value = ''; // Limpiar el área de texto antes de agregar nuevos datos
+            extractedData = []; // Limpiar el array de datos extraídos
+            
+            // Verificar si se seleccionaron archivos
+            if (files.length > 0) {
+                for (let i = 0; i < files.length; i++) {
+                    const file = files[i];
+                    const fileName = file.name;
+                    
+                    // Leer el archivo y extraer metadatos EXIF
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        const img = new Image();
+                        img.src = e.target.result;
+
+                        img.onload = function() {
+                            EXIF.getData(img, function() {
+                                const gpsLatitude = EXIF.getTag(this, "GPSLatitude");
+                                const gpsLongitude = EXIF.getTag(this, "GPSLongitude");
+                                const gpsLatitudeRef = EXIF.getTag(this, "GPSLatitudeRef");
+                                const gpsLongitudeRef = EXIF.getTag(this, "GPSLongitudeRef");
+
+                                if (gpsLatitude && gpsLongitude) {
+                                    // Convertir coordenadas a grados decimales
+                                    const lat = convertDMSToDD(
+                                        gpsLatitude[0], gpsLatitude[1], gpsLatitude[2], gpsLatitudeRef
+                                    );
+                                    const lon = convertDMSToDD(
+                                        gpsLongitude[0], gpsLongitude[1], gpsLongitude[2], gpsLongitudeRef
+                                    );
+
+                                    // Agregar a los datos extraídos
+                                    extractedData.push({
+                                        fileName: fileName,
+                                        latitude: lat,
+                                        longitude: lon
+                                    });
+
+                                    // Mostrar los resultados en el área de texto
+                                    metadataOutput.value += `${fileName}: Latitude: ${lat}, Longitude: ${lon}\n`;
+                                } else {
+                                    metadataOutput.value += `${fileName}: No GPS Data\n`;
+                                }
+                            });
+                        };
+                    };
+                    reader.readAsDataURL(file); // Leer el archivo como URL
+                }
+            } else {
+                alert('No files selected');
+            }
+        });
+
+        // Función para limpiar el texto
+        function clearText() {
+            document.getElementById('metadataOutput').value = ''; // Limpiar el área de texto
+            extractedData = []; // Limpiar los datos extraídos
+        }
+
+        // Función para guardar los datos como archivo KML
+        function saveAsKML() {
+            if (extractedData.length > 0) {
+                let kmlContent = '<?xml version="1.0" encoding="UTF-8"?>\n';
+                kmlContent += '<kml xmlns="http://www.opengis.net/kml/2.2">\n';
+                kmlContent += '<Document>\n';
+                
+                extractedData.forEach(data => {
+                    kmlContent += '  <Placemark>\n';
+                    kmlContent += `    <name>${data.fileName}</name>\n`;
+                    kmlContent += '    <Point>\n';
+                    kmlContent += `      <coordinates>${data.longitude},${data.latitude},0</coordinates>\n`;
+                    kmlContent += '    </Point>\n';
+                    kmlContent += '  </Placemark>\n';
+                });
+
+                kmlContent += '</Document>\n';
+                kmlContent += '</kml>\n';
+
+                // Crear enlace de descarga
+                const blob = new Blob([kmlContent], { type: 'application/vnd.google-earth.kml+xml' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = 'image_metadata.kml'; // Nombre del archivo KML
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            } else {
+                alert('No GPS data available to save.');
+            }
+        }
+    </script>
+</body>
+</html>
